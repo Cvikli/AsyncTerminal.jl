@@ -1,5 +1,7 @@
 module AsyncTerminal
 
+export @aync_tty, @aync_ssh 
+
 # THE magic function. Prerequest the next X terminal tty number, so we can attach to them. See Readme Caveat.
 get_next_pts_nums(task_num) = begin
 	pts_ls = read(`ls /dev/pts`, String)
@@ -20,8 +22,8 @@ get_next_pts_nums(task_num) = begin
 	pts_ids
 end
 
-run_cmd(cmds::Vector{Cmd}, io, auth) = for cmd in cmds AsyncTerminal.run_cmd(cmd, io, auth) end
-run_cmd(cmds::Vector{Cmd}, io) = for cmd in cmds AsyncTerminal.run_cmd(cmd, io) end
+run_cmd(cmds::NTuple{N, Cmd}, io, auth) where N = for cmd in cmds AsyncTerminal.run_cmd(cmd, io, auth) end
+run_cmd(cmds::NTuple{N, Cmd}, io) where N = for cmd in cmds AsyncTerminal.run_cmd(cmd, io) end
 
 run_cmd(cmd::Cmd, io, auth) = begin
 	@show "heeeyyyooo"
@@ -39,19 +41,29 @@ run_in_terminal(cmd, t_id, auth) = begin
 	run(`gnome-terminal -- zsh`)
 	@show t_id
 	pts_file = open("/dev/pts/$t_id", "w")
-	AsyncTerminal.run_cmd(cmd, pts_file, auth)
+	# AsyncTerminal.run_cmd(cmd, pts_file, auth)
+	pts_file
 end
 run_in_terminal(cmd, t_id) = begin
 	run(`gnome-terminal -- zsh`)
 	pts_file = open("/dev/pts/$t_id", "w")
-	AsyncTerminal.run_cmd(cmd, pts_file)
+	# AsyncTerminal.run_cmd(cmd, pts_file)
+	pts_file
 end
 
 #################### @async_tty  &  @async_ssh ####################
 macro aync_tty(cmds)
-	esc(:(for (i,t_id) in enumerate(AsyncTerminal.get_next_pts_nums(length($cmds)))
-			@async AsyncTerminal.run_in_terminal($cmds[i], t_id)
-	end))
+	eval(esc(:(
+		tty_IOs = [];
+		for (i,t_id) in enumerate(AsyncTerminal.get_next_pts_nums(length($cmds)))
+		
+				tty_IO = AsyncTerminal.run_in_terminal($cmds[i], t_id) &&	push!(tty_IOs, tty_IO)
+				# println(tty_IOs)
+				# @async AsyncTerminal.run_in_terminal($cmds[i], t_id)
+		end;
+		return tty_IOs
+	)))
+	
 end
 
 macro aync_ssh(remote_cmds)
