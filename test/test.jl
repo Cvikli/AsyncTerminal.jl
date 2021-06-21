@@ -1,21 +1,45 @@
-include("../src/AsyncTerminal.jl")
-using .AsyncTerminal
+using Revise 
+
+includet("../src/AsyncTerminal.jl")
+using .AsyncTerminal: aync_tty, aync_ssh, @aync_tty, @aync_ssh 
 
 
 # user, ip, cust_cmd = "testuser", "127.0.0.1", """echo "I am on the machine" """
-terms = AsyncTerminal.@aync_tty [
+terms = aync_tty([
+	`tty`,
+	(`echo "haha whut"`, `tty`, `echo "I am on the machine"`, `echo "hell"`), 
+	`echo "We are rocking!"`
+])
+@show terms
+#%%
+@aync_tty [
 	`tty`,
 	(`echo "haha whut"`, `tty`, `echo "I am on the machine"`, `echo "hell"`), 
 	`echo "We are rocking!"`
 ]
-@show terms
 #%%
-@show "ok"
 
-# @aync_tty [
-# 	(term1, `tty`),
-# 	(term2, `tty`)
-# ]
+run_on(term1, `tty`)
+
+#%%
+aync_tty([
+	(`ssh six@192.168.0.100`, `tty`, `echo "I am on the machine"`),
+	(`tty`),
+	(`tty`, `echo "I am on the machine"`)
+])
+
+#%%
+aync_ssh([
+	("six@192.168.0.100", `tty`),
+	(nothing, `tty`),
+	("six@192.168.0.100", `tty`)
+])
+#%%
+@aync_ssh [
+	("six@192.168.0.100", `tty`),
+	(nothing, `tty`),
+	("six@192.168.0.100", `tty`)
+]
 
 
 # AsyncTerminal.@aync_ssh [
