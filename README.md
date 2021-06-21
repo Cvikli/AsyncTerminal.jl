@@ -10,8 +10,13 @@ This runs 3 terminal with the specified commands.
 *BEST*
 Multiple ssh run simultaneously with prespecified commands!
 ```julia
-@aync_tty [`tty`,[`echo "haha whut"`, `tty`, `echo "I am on the machine"`, `echo "hell"`], `echo "We are rocking!"`]
+terminals = @aync_tty [
+	(`tty`, `echo "Local server heyy"`),
+	(`ssh serverX@192.168.0.23`, `echo "haha whut"`, `tty`, `echo "I am on the machine"`, `echo "hell"`), 
+	(`ssh server4@192.168.0.22`, `echo "We are rocking!"`)
+]
 ```
+Don't forget to have some privatekey on your side to be able to 
 
 # Why?
 I needed this to open several terminal and see the output continuously of different runs. 
