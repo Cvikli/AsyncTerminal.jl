@@ -52,17 +52,15 @@ exit(t_io::IOStream, shell="bash")                         = terminate(t_io, she
 close_tty(t_io::IOStream, shell="bash")                    = terminate(t_io, shell)
 terminate(t_io::IOStream, shell="bash")                    = begin
 	PID::Ref{Int} = -1
-	@show t_io.handle
 	all_pts2ID = list_all_terminals(shell)
 	pts = get_pts_from_psaux(t_io.name)
-	@show PID[]
-	@show all_pts2ID
 	try 
 		PID[] = all_pts2ID[pts]
-		@show PID[]
 		run(`kill -9 $(PID[])`)
 	catch err
 		if isa(err, KeyError)
+			println(typeof(err),": Terminal with $(pts) isn't found!")
+		elseif isa(err, ProcessFailedException)
 			println(typeof(err),": Terminal with $(pts) isn't found!")
 		else
 			println(typeof(err))
