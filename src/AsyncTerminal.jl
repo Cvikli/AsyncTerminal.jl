@@ -23,11 +23,11 @@ start_x_tty_nostart(tty_count, shell="bash") = begin
 end
 start_x_tty(tty_count, shell="bash") = [open("/dev/pts/$t_id", "w") for t_id in sort(start_x_tty_nostart(tty_count, shell))]
 
-start(t_io::IOStream, fns::Vector{Function})  = for fn  in fns  println(t_io, fn) end 
-start(t_io::IOStream, fns::Tuple)             = for fn  in fns  println(t_io, fn) end 
-start(t_io::IOStream, cmds::Vector{Cmd})      = for cmd in cmds run(t_io, cmd)    end 
 start(t_io::IOStream, cmd::Cmd)               = run(t_io, cmd) 
-start(t_io::IOStream, cmd::Function)          = run(t_io, cmd) 
+start(t_io::IOStream, cmds::Tuple)            = for cmd in cmds; run(t_io, cmd)    end 
+start(t_io::IOStream, cmds::Vector{Cmd})      = for cmd in cmds; run(t_io, cmd)    end 
+start(t_io::IOStream, fns::Tuple)             = for fn  in fns;  println(t_io, fn) end 
+start(t_io::IOStream, fns::Vector{Function})  = for fn  in fns;  println(t_io, fn) end 
 
 list_all_bashes(shell="bash") = begin
 	ps_output     = read(`ps aux`, String)
