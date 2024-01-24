@@ -4,7 +4,7 @@ using Base: run
 
 Base.run(t_io::IOStream, cmd::Cmd) = begin
 	# run(`echo "$cmd"`, t_io, t_io, t_io)  # print the command
-	write(t_io, "$cmd")  									# print the command
+	write(t_io, "$(cmd)\n")  									# print the command
 	flush(t_io)
 	run(cmd, t_io, t_io, t_io)            # run the command
 end

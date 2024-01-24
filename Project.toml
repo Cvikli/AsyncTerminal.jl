@@ -1,4 +1,4 @@
 name = "AsyncTerminal"
 uuid = "fe1cf894-abd0-4973-ba8d-91e6b0e9abc6"
 authors = ["Marcell <havlikmarcell@gmail.com>"]
-version = "0.1.0"
+version = "0.9.0"

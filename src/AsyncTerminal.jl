@@ -106,12 +106,14 @@ function create_ttys(ttys_count::Int, shell="bash")
 	end
 	return tty_IOs
 end
-function aync_tty(cmds::Tuple, shell="bash")
+function async_tty(cmds::Tuple, shell="bash")
 	tty_IOs = create_ttys(length(cmds), shell)
-	for (tty_io,cmd) in zip(tty_IOs, cmds) @async start(tty_io, cmd) end
+	@show cmds
+	for (tty_io,cmd) in zip(tty_IOs, cmds) @async run(tty_io, cmd) end
 	return tty_IOs
 end
-aync_tty(cmds::Vector{T}, shell="bash") where T = async_tty(Tuple(cmds...), shell)
+async_tty(cmds::Vector{T}; shell="bash") where T = async_tty((cmds...,), shell)
+async_tty(cmds::Vector{T}, shell="bash") where T = async_tty((cmds...,), shell)
 
 
 end # module

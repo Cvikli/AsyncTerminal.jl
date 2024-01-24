@@ -12,10 +12,14 @@ aync_tty((
 #%%
 
 #%%
-terminals = aync_tty([
+includet("../src/AsyncTerminal.jl")
+using .AsyncTerminal: async_tty
+
+terminals = async_tty([
 	(`ssh -t serverX@192.168.0.100 pwd`, `ssh -t serverX@192.168.0.100 echo "We are rocking!"`,`ssh -t serverX@192.168.0.100 "cd repo && pwd"`,`ssh -t serverX@192.168.0.100 pwd`),
-	(`echo "heyyooo"`),
-	])
+	(`echo "heyyooo"`,),
+	(`echo "heyyooo"`,`tty`,`echo "heyyooo"`,),
+	], shell="zsh")
 #%%
 
 run(terminals[1], `echo "I am still here heyyy"`)
