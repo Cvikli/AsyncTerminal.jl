@@ -26,7 +26,7 @@ start_x_tty(tty_count, shell="bash") = [open("/dev/pts/$t_id", "w") for t_id in 
 start(t_io::IOStream, cmd::Cmd)               = run(t_io, cmd) 
 start(t_io::IOStream, cmds::Tuple)            = for cmd in cmds; run(t_io, cmd)    end 
 start(t_io::IOStream, cmds::Vector{Cmd})      = for cmd in cmds; run(t_io, cmd)    end 
-start(t_io::IOStream, fns::Tuple)             = for fn  in fns;  println(t_io, fn) end 
+# start(t_io::IOStream, fns::Tuple)             = for fn  in fns;  println(t_io, fn) end 
 start(t_io::IOStream, fns::Vector{Function})  = for fn  in fns;  println(t_io, fn) end 
 
 list_all_bashes(shell="bash") = begin
@@ -113,7 +113,6 @@ function async_tty(cmds::Tuple, shell="bash")
 	return tty_IOs
 end
 async_tty(cmds::Vector{T}; shell="bash") where T = async_tty((cmds...,), shell)
-async_tty(cmds::Vector{T}, shell="bash") where T = async_tty((cmds...,), shell)
 
 
 end # module
