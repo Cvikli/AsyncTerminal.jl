@@ -1,7 +1,6 @@
 using Revise 
 
-includet("../src/AsyncTerminal.jl")
-using .AsyncTerminal: aync_tty
+using AsyncTerminal: aync_tty
 
 aync_tty((
 	`tty`,
@@ -37,13 +36,70 @@ terms = aync_tty([
 @show terms
 #%%
 using Base.Threads
-includet("../src/AsyncTerminal.jl")
-using .AsyncTerminal: create_ttys
-ttys = create_ttys(nthreads(), "zsh")
-@threads for i in 1:100
-	write(ttys[threadid()], "I am here $i\n") 
-	flush(ttys[threadid()])
+using AsyncTerminal: create_ttys
+TTNum = 3
+ttys = create_ttys(TTNum, "zsh")
+@threads for i in 1:3
+	@show i
+	write(ttys[i], "I am here $i\n") 
+	flush(ttys[i])
 end
+#%%
+is it possible to read data from the terminal?
+how could I handle the data coming from it? What pattern should I use?
+
+
+start_x_tty(tty_count, shell="bash") = [open("/dev/pts/$t_id", "w") for t_id in sort(start_x_tty_nostart(tty_count, shell))]
+can I get data from that /dev/pts/id or it is not possible?
+#%%
+ttys = create_ttys(1, "zsh")
+function read_terminal(io::IOStream)
+	while !eof(io)
+			line = readline(io)
+			# Process the line
+			println("Received: ", line)
+	end
+end
+
+# Async reading pattern
+@async read_terminal(ttys[1])
+write(ttys[1], "I am here i\n") 
+flush(ttys[1])
+write(ttys[1], "I am2 here 2\n") 
+flush(ttys[1])
+
+#%%
+using AsyncTerminal: create_ttys
+using AsyncTerminal: read_terminall
+ttys = create_ttys(1, "zsh")
+@async read_terminal(ttys[1])
+write(ttys[1], "I am here i\n") 
+flush(ttys[1])
+write(ttys[1], "I am2 here 2\n") 
+flush(ttys[1])
+
+#%%
+function monitor_terminal(io::IOStream)
+	buffer = IOBuffer()
+	while isopen(io)
+			try
+					if bytesavailable(io) > 0
+							write(buffer, read(io))
+							# Process buffer content
+							println(String(take!(buffer)))
+					end
+					sleep(0.1)  # Prevent busy waiting
+			catch e
+					@warn "Terminal read error" exception=e
+					break
+			end
+	end
+end
+
+ttys = create_ttys(1)
+@async monitor_terminal(ttys[1])
+
+
 #%%
 macroexpand(@aync_tty [
 	`tty`,
@@ -155,6 +211,66 @@ terminate(ttys[1])
 #%%
 write(ttys[1], "exit")
 flush(ttys[1])
+#%%
+fd = Base.Filesystem.open("/dev/pts/15", Base.JL_O_RDWR)
+rawfd = Base.Filesystem.fd(fd)
+tty = Base.TTY(rawfd)
+
+# Keep reading in a loop
+while true
+    try
+        line = readline(tty)
+        println("Received: ", line)í
+    catch e
+        println("Error: ", e)
+        break
+    end
+end
+
+#%%
+function read_pts(pts_path)
+	    # Create a new PTY pair
+			master_fd = ccall(:posix_openpt, Cint, (Cint,), Base.Filesystem.JL_O_RDWR)
+			master_fd == -1 && error("Failed to open PTY master")
+			@show "litening"
+			# Grant and unlock PTY
+			ccall(:grantpt, Cint, (Cint,), master_fd) == 0 || error("grantpt failed")
+			ccall(:unlockpt, Cint, (Cint,), master_fd) == 0 || error("unlockpt failed")
+			
+			@show "??"
+			# Set non-blocking I/O on master
+			ccall(:fcntl, Int32, (RawFD, Int32, Int32), RawFD(master_fd), 3, 2048)
+			
+			@show "??f"
+			# Configure terminal
+			run(`sh -c "stty raw -echo -icanon -iexten -isig -ixon -ixoff < $pts_path"`)
+			@show "??ff3"
+			
+			buffer = Vector{UInt8}(undef, 1)
+			while true
+					try
+							n = ccall(:read, Cssize_t, (RawFD, Ptr{UInt8}, Csize_t), RawFD(master_fd), buffer, 1)
+							if n > 0
+									# We got data before terminal consumed it
+									@show String(buffer)
+									flush(stdout)
+							else
+									sleep(0.001)
+							end
+					catch e
+							println("Error: ", e)
+							break
+					end
+			end
+			
+			@show "closing"
+			# Cleanup
+			ccall(:close, Cint, (RawFD,), RawFD(master_fd))
+	
+
+end
+read_pts("/dev/pts/7")
+
 #%%
 
 
