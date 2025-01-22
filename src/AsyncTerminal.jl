@@ -9,39 +9,69 @@ include("BaseExtension.jl")
 
 all_our_pts2ID = Dict{String,Int}()
 
-start_x_tty_nostart(tty_count, shell="bash"; monitor=false) = begin
-	pts_ls = read(`ls /dev/pts`, String)
-	monitor_fds = nothing
-	
-	if monitor
-			# Create monitoring PTYs first
-			monitor_fds = Vector{RawFD}(undef, tty_count)
-			monitor_pts = Vector{String}(undef, tty_count)
-			for i in 1:tty_count
-					master_fd = ccall(:posix_openpt, Cint, (Cint,), Base.Filesystem.JL_O_RDWR)
-					master_fd == -1 && error("Failed to open PTY master")
-					ccall(:grantpt, Cint, (Cint,), master_fd) == 0 || error("grantpt failed")
-					ccall(:unlockpt, Cint, (Cint,), master_fd) == 0 || error("unlockpt failed")
-					monitor_pts[i] = unsafe_string(ccall(:ptsname, Ptr{UInt8}, (Cint,), master_fd))
-					monitor_fds[i] = RawFD(master_fd)
-			end
-			
-			@threads for i in 1:tty_count
-            # Use script with -f for flushing and -q for quiet mode
-            run(`gnome-terminal -- $shell -c "script -f -q $(monitor_pts[i])"`, wait=false)
-        end
-	else
-			@threads for i in 1:tty_count
-					run(`gnome-terminal -- $shell`, wait=false)
-			end
-	end
-	
-	new_pts_ls = read(`ls /dev/pts`, String)
-	pts_nums = parse.(Int,split(pts_ls, '\n')[1:end-2])
-	new_pts_nums = parse.(Int,split(new_pts_ls, '\n')[1:end-2])
-	new_t_ids = Int[t_id for t_id in new_pts_nums if !(t_id in pts_nums)]
+const LIBC = Base.Libc.Libdl.dlopen("/lib/x86_64-linux-gnu/libc.so.6")
+const openpty = Base.Libc.Libdl.dlsym(LIBC, :openpty)
 
-	return new_t_ids, monitor_fds
+mutable struct PTY
+    master_fd::RawFD
+    slave_fd::RawFD
+    slave_path::String
+    process::Union{Base.Process, Nothing}
+end
+
+function create_pty()
+    # O_RDWR | O_NOCTTY
+    master_fd = ccall(:posix_openpt, Cint, (Cint,), 2 | 32768)
+    master_fd < 0 && error("Failed to open PTY master")
+
+    # Grant and unlock PTY
+    ccall(:grantpt, Cint, (Cint,), master_fd) == 0 || error("Failed to grant PTY")
+    ccall(:unlockpt, Cint, (Cint,), master_fd) == 0 || error("Failed to unlock PTY")
+
+    # Get slave path
+    slave_path = zeros(UInt8, 1024)
+    ret = ccall(:ptsname_r, Cint, (Cint, Ptr{UInt8}, Csize_t), 
+                master_fd, slave_path, length(slave_path))
+    ret != 0 && error("Failed to get slave PTY name")
+
+    # Open slave
+    slave_path_str = GC.@preserve slave_path unsafe_string(pointer(slave_path))
+    slave_fd = ccall(:open, Cint, (Ptr{UInt8}, Cint), slave_path_str, 2)
+    slave_fd < 0 && (close(master_fd); error("Failed to open slave PTY"))
+
+    PTY(RawFD(master_fd), RawFD(slave_fd), slave_path_str, nothing)
+end
+
+start_x_tty_nostart(tty_count, shell="bash"; monitor=false) = begin
+    pts_ls = read(`ls /dev/pts`, String)
+		@show pts_ls
+    monitor_ptys = nothing
+    
+    if monitor
+        monitor_ptys = [create_pty() for _ in 1:tty_count]
+        
+        @threads for i in 1:length(monitor_ptys)
+            pty = monitor_ptys[i]
+            # Use cat to keep the terminal open and pipe through the shell
+            cmd = `gnome-terminal -- $shell -c "stty raw -echo; cat <$(pty.slave_path) | $shell >$(pty.slave_path) 2>&1"`
+            pty.process = run(cmd)
+        end
+        sleep(0.5)
+    else
+        @threads for i in 1:tty_count
+            # Keep shell running by using -i flag and preventing immediate exit
+            run(`gnome-terminal -- $shell -i`)
+        end
+    end
+    
+    new_pts_ls = read(`ls /dev/pts`, String)
+		@show new_pts_ls
+    pts_nums = parse.(Int, split(pts_ls, '\n')[1:end-2])
+    new_pts_nums = parse.(Int, split(new_pts_ls, '\n')[1:end-2])
+    new_t_ids = Int[t_id for t_id in new_pts_nums if !(t_id in pts_nums)]
+		@show new_t_ids
+
+    return new_t_ids, monitor_ptys
 end
 
 function start_x_tty(tty_count, shell="bash") 
@@ -49,10 +79,11 @@ function start_x_tty(tty_count, shell="bash")
     [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
 end
 
+# Update the start_x_tty_monitored function
 function start_x_tty_monitored(tty_count, shell="bash")
-    term_ids, monitor_fds = start_x_tty_nostart(tty_count, shell, monitor=true)
+    term_ids, monitor_ptys = start_x_tty_nostart(tty_count, shell, monitor=true)
     ttys = [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
-    return ttys, monitor_fds
+    return ttys, monitor_ptys
 end
 
 start(t_io::IOStream, cmd::Cmd)               = run(t_io, cmd) 
@@ -122,6 +153,14 @@ terminate_all_async_terminal() = begin
 	call_our_pts2ID
 end
 
+# Add cleanup function for PTYs
+function cleanup_pty(pty::PTY)
+    if pty.process !== nothing
+        kill(pty.process)
+    end
+    ccall(:close, Cint, (RawFD,), pty.master_fd)
+    ccall(:close, Cint, (RawFD,), pty.slave_fd)
+end
 	
 
 #################### @async_tty ####################
@@ -146,23 +185,5 @@ function async_tty(cmds::Tuple, shell="bash")
 end
 async_tty(cmds::Vector{T}; shell="bash") where T = async_tty((cmds...,), shell)
 
-function read_terminall(io::IOStream)
-    buffer = Vector{UInt8}(undef, 1024)
-    while isopen(io)
-        try
-            if bytesavailable(io) > 0
-                n = readbytes!(io, buffer)
-                if n > 0
-                    print(String(view(buffer, 1:n)))
-                    flush(stdout)
-                end
-            end
-            sleep(0.01)
-        catch e
-            @warn "Terminal read error" exception=e
-            break
-        end
-    end
-end
 
 end # module

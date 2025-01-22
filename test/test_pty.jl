@@ -52,6 +52,6 @@ function monitor_terminal(target_pts::String)
 end
 
 # Usage (replace with actual pts number):
-monitor_terminal("/dev/pts/12")
+monitor_terminal("/dev/pts/14")
 
 #%%

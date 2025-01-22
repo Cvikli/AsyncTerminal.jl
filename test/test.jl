@@ -70,9 +70,9 @@ flush(ttys[1])
 
 #%%
 using AsyncTerminal: create_ttys
-using AsyncTerminal: read_terminall
 ttys = create_ttys(1, "zsh")
-@async read_terminal(ttys[1])
+@show ttys
+# @async read_terminal(ttys[1])
 write(ttys[1], "I am here i\n") 
 flush(ttys[1])
 write(ttys[1], "I am2 here 2\n") 

@@ -1,4 +1,4 @@
-using Boilerplate: @async_showerr
+using BoilerplateCvikli: @async_showerr
 using AsyncTerminal: create_ttys, get_pts_from_psaux
 
 import REPL.Terminals: TTYTerminal
