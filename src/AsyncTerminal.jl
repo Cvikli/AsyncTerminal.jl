@@ -42,25 +42,28 @@ function create_pty()
     PTY(RawFD(master_fd), RawFD(slave_fd), slave_path_str, nothing)
 end
 
-start_x_tty_nostart(tty_count, shell="bash"; monitor=false) = begin
+start_x_tty_nostart(tty_count, startcmd="bash"; monitor=false) = begin
     pts_ls = read(`ls /dev/pts`, String)
 		@show pts_ls
     monitor_ptys = nothing
     
-    if monitor
+    if startcmd=="noshell"
+        @threads for i in 1:tty_count
+            run(`gnome-terminal -- sleep infinity`)
+        end
+		elseif monitor
         monitor_ptys = [create_pty() for _ in 1:tty_count]
         
         @threads for i in 1:length(monitor_ptys)
             pty = monitor_ptys[i]
             # Use cat to keep the terminal open and pipe through the shell
-            cmd = `gnome-terminal -- $shell -c "stty raw -echo; cat <$(pty.slave_path) | $shell >$(pty.slave_path) 2>&1"`
+            cmd = `gnome-terminal -- $startcmd -c "stty raw -echo; cat <$(pty.slave_path) | $startcmd >$(pty.slave_path) 2>&1"`
             pty.process = run(cmd)
         end
         sleep(0.5)
     else
         @threads for i in 1:tty_count
-            # Keep shell running by using -i flag and preventing immediate exit
-            run(`gnome-terminal -- $shell -i`)
+            run(`gnome-terminal -- $startcmd`)
         end
     end
     
@@ -74,14 +77,14 @@ start_x_tty_nostart(tty_count, shell="bash"; monitor=false) = begin
     return new_t_ids, monitor_ptys
 end
 
-function start_x_tty(tty_count, shell="bash") 
-    term_ids, _ = start_x_tty_nostart(tty_count, shell, monitor=false)
+function start_x_tty(tty_count, startcmd="bash") 
+    term_ids, _ = start_x_tty_nostart(tty_count, startcmd, monitor=false)
     [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
 end
 
 # Update the start_x_tty_monitored function
-function start_x_tty_monitored(tty_count, shell="bash")
-    term_ids, monitor_ptys = start_x_tty_nostart(tty_count, shell, monitor=true)
+function start_x_tty_monitored(tty_count, startcmd="bash")
+    term_ids, monitor_ptys = start_x_tty_nostart(tty_count, startcmd, monitor=true)
     ttys = [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
     return ttys, monitor_ptys
 end
@@ -169,17 +172,18 @@ end
 function create_ttys(ttys_count::Int, shell="bash")
 	global all_our_pts2ID
 	tty_IOs    = start_x_tty(ttys_count, shell)
-	tty_pts2ID = list_all_terminals(shell)
+	# tty_pts2ID = list_all_terminals(shell)
+	# @show tty_pts2ID
 	for tty in tty_IOs
 		pts = get_pts_from_psaux(tty.name)
 		isempty(pts) && continue
-		all_our_pts2ID[pts]=tty_pts2ID[pts]  
+		pts_num = parse(Int, split(pts, "/")[2])
+		all_our_pts2ID[pts] = pts_num
 	end
 	return tty_IOs
 end
 function async_tty(cmds::Tuple, shell="bash")
 	tty_IOs = create_ttys(length(cmds), shell)
-	@show cmds
 	for (tty_io,cmd) in zip(tty_IOs, cmds) @async run(tty_io, cmd) end
 	return tty_IOs
 end
