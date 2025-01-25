@@ -42,7 +42,7 @@ function create_pty()
     PTY(RawFD(master_fd), RawFD(slave_fd), slave_path_str, nothing)
 end
 
-start_x_tty_nostart(tty_count, startcmd="bash"; monitor=false) = begin
+start_x_ttys_nostart(tty_count, startcmd="bash"; monitor=false) = begin
     pts_ls = read(`ls /dev/pts`, String)
 		@show pts_ls
     monitor_ptys = nothing
@@ -77,14 +77,14 @@ start_x_tty_nostart(tty_count, startcmd="bash"; monitor=false) = begin
     return new_t_ids, monitor_ptys
 end
 
-function start_x_tty(tty_count, startcmd="bash") 
-    term_ids, _ = start_x_tty_nostart(tty_count, startcmd, monitor=false)
+function start_x_ttys(tty_count, startcmd="bash") 
+    term_ids, _ = start_x_ttys_nostart(tty_count, startcmd, monitor=false)
     [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
 end
 
-# Update the start_x_tty_monitored function
-function start_x_tty_monitored(tty_count, startcmd="bash")
-    term_ids, monitor_ptys = start_x_tty_nostart(tty_count, startcmd, monitor=true)
+# Update the start_x_ttys_monitored function
+function start_x_ttys_monitored(tty_count, startcmd="bash")
+    term_ids, monitor_ptys = start_x_ttys_nostart(tty_count, startcmd, monitor=true)
     ttys = [open("/dev/pts/$t_id", "w") for t_id in sort(term_ids)]
     return ttys, monitor_ptys
 end
@@ -169,9 +169,18 @@ end
 #################### @async_tty ####################
 # macro ttys(args...); quote esc(ttys(($(esc(args)))...)) end;end
 
+function create_tty(shell="bash")
+	global all_our_pts2ID
+	tty    = start_x_ttys(1,shell)[1]
+	pts = get_pts_from_psaux(tty.name)
+	isempty(pts) && return nothing
+	pts_num = parse(Int, split(pts, "/")[2])
+	all_our_pts2ID[pts] = pts_num
+	return tty
+end
 function create_ttys(ttys_count::Int, shell="bash")
 	global all_our_pts2ID
-	tty_IOs    = start_x_tty(ttys_count, shell)
+	tty_IOs    = start_x_ttys(ttys_count, shell)
 	# tty_pts2ID = list_all_terminals(shell)
 	# @show tty_pts2ID
 	for tty in tty_IOs
